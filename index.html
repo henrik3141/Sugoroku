@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>壽出世双六 — Kotobuki Shusse Sugoroku</title>
+<meta name="description" content="A playable version of the Edo-period life-course board game Kotobuki Shusse Sugoroku, for the G30 History course at Nagoya University.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="app">
+
+  <header class="masthead">
+    <div>
+      <div class="title-jp">壽出世双六</div>
+      <div class="title-en">Kotobuki Shusse Sugoroku &middot; “Longevity &amp; Success” — a Tokugawa life-course game</div>
+    </div>
+    <div class="spacer"></div>
+    <nav>
+      <button class="btn btn-sm btn-ghost" id="nav-cells">Browse the 45 cells</button>
+      <button class="btn btn-sm btn-ghost" id="nav-odds">Fates of the six</button>
+      <button class="btn btn-sm btn-ghost" id="nav-about">About</button>
+    </nav>
+  </header>
+
+  <!-- ================= SETUP ================= -->
+  <section class="screen active" id="screen-setup">
+    <div class="setup-wrap">
+
+      <div class="intro">
+        <p class="lede">In the Tokugawa period, a <span class="jp">双六</span> (sugoroku) print was not a race around a track. It was a
+        map of a life. You are born into a station, you roll, and the board tells you where a person of that
+        station could plausibly go next — up through headship, trade and scholarship, or down through the
+        pleasure quarters, bankruptcy and the begging bowl.</p>
+
+        <p>Each player takes one of the six characters printed in the <b>Start</b> square and begins in that
+        character's own cell. On your turn you roll a die and read your <em>current</em> cell's instructions:
+        only certain numbers lead anywhere. Roll a number that isn't listed and nothing happens — roll again.</p>
+
+        <p>Three things can end a life course:<br>
+        <b>長者 (Finish)</b> — a wealthy house, you win &nbsp;·&nbsp;
+        <b>Cell 5 隠居</b> — honorable retirement &nbsp;·&nbsp;
+        <b>Cell 45 願人坊主</b> — the mendicant monk, game over.</p>
+
+        <div class="board-preview">
+          <img src="assets/board.jpg" alt="The Kotobuki Shusse Sugoroku board">
+        </div>
+
+        <p class="print-credit">Board: <span class="jp">壽出世双六</span>, designed by Utagawa Kuniteru <span class="jp">（國輝画）</span>,
+        published by Eikyūdō <span class="jp">（榮久堂版）</span>. All cell artwork on this page is detail from that print.</p>
+      </div>
+
+      <div class="setup-card">
+        <h3>Players</h3>
+        <div class="count-row" id="count-row"></div>
+
+        <div class="player-rows" id="player-rows"></div>
+
+        <p class="assign-note" id="assign-note"></p>
+
+        <div class="setup-actions">
+          <button class="btn" id="btn-reroll">Roll for characters</button>
+          <button class="btn btn-primary" id="btn-start">Begin the game</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= GAME ================= -->
+  <section class="screen" id="screen-game">
+    <div class="game-wrap">
+
+      <div class="board-col">
+        <div class="board-frame" id="board-frame">
+          <img src="assets/board.jpg" alt="Kotobuki Shusse Sugoroku board print">
+        </div>
+        <div class="board-tools">
+          <label><input type="checkbox" id="tgl-num" checked> show cell numbers</label>
+          <span class="spacer" style="flex:1"></span>
+          <span>click any cell to read it</span>
+        </div>
+      </div>
+
+      <div class="panel-col">
+
+        <div class="card turn-card" id="turn-card">
+          <div class="die" id="die"></div>
+          <div class="turn-info">
+            <div class="whose" id="turn-whose"></div>
+            <div class="at" id="turn-at"></div>
+            <div class="msg" id="turn-msg"></div>
+          </div>
+          <div class="turn-actions">
+            <button class="btn btn-primary" id="btn-roll">Roll the die</button>
+            <button class="btn btn-sm" id="btn-auto">Play out this life</button>
+            <button class="btn btn-sm btn-ghost" id="btn-quit">End game</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h">Life courses <span class="spacer"></span><span id="turn-count"></span></div>
+          <div class="plist" id="plist"></div>
+        </div>
+
+        <div class="card cellcard" id="cellcard"></div>
+
+        <div class="card">
+          <div class="card-h">Record</div>
+          <div class="logbox" id="logbox"></div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= RESULTS ================= -->
+  <section class="screen" id="screen-results">
+    <div class="results">
+      <h2>上がり</h2>
+      <p class="sub">Every life course has come to rest.</p>
+      <div id="res-list"></div>
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-again">Play again</button>
+        <button class="btn" id="btn-odds2">Compare with the odds</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer class="sitefoot">
+  <p class="credit">Concept &amp; Idea by <b>Tristan Grunow</b> &nbsp;·&nbsp; Implementation by <b>Henrik Bachmann</b></p>
+  <p>G30 History, Nagoya University. Board and cell texts from the course game packet;
+     artwork from <span class="jp">壽出世双六</span> by Utagawa Kuniteru.</p>
+</footer>
+
+<!-- ================= MODAL ================= -->
+<div class="modal" id="modal">
+  <div class="modal-box">
+    <button class="btn btn-sm close" id="modal-close">Close</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
