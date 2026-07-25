@@ -202,8 +202,12 @@ h1,h2,h3,h4 { margin: 0; font-weight: 600; }
 .card-h .spacer { flex: 1; }
 .card-b { padding: 1rem; }
 
-/* turn / dice */
+/* turn / chance */
 .turn-card { display: grid; grid-template-columns: auto 1fr; gap: 1.1rem; align-items: center; padding: 1rem; }
+.chance { display: grid; place-items: center; }
+.turn-card .die { display: none; }
+.turn-card.die-mode .die { display: grid; }
+.turn-card.die-mode #wheel { display: none; }
 .die {
   width: 74px; height: 74px; border-radius: 14px; flex: none;
   background: linear-gradient(150deg, #fbf6ea, #ddd0b6);
@@ -229,6 +233,18 @@ h1,h2,h3,h4 { margin: 0; font-weight: 600; }
 .turn-info .msg .hit { color: var(--paper); }
 .turn-actions { grid-column: 1 / -1; display: flex; gap: .55rem; flex-wrap: wrap; }
 
+/* wheel / die switch */
+.mode {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: .55rem; flex-wrap: wrap;
+  border-top: 1px solid var(--line); padding-top: .7rem; font-size: .8rem; color: var(--ink-faint);
+}
+.mode-label { font-family: var(--sans); font-size: .64rem; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { background: var(--panel-2); border: none; padding: .18rem .8rem; font-size: .84rem; color: var(--ink-dim); transition: .15s; }
+.seg button:hover { color: var(--ink); }
+.seg button.on { background: var(--gold); color: #241c12; font-weight: 600; }
+.mode-hint { flex-basis: 100%; font-style: italic; line-height: 1.45; }
+
 /* players list */
 .plist { display: flex; flex-direction: column; }
 .plist .p {
@@ -250,10 +266,16 @@ h1,h2,h3,h4 { margin: 0; font-weight: 600; }
 .badge.win { color: var(--gold); } .badge.retire { color: var(--jade); } .badge.monk { color: var(--vermilion); }
 
 /* cell card */
-.cellcard img { width: 100%; display: block; background: #d8ccb4;
-  height: clamp(170px, 27vh, 300px); object-fit: cover; object-position: center 40%; }
-.cellcard .imgwrap { border-bottom: 1px solid var(--line); position: relative; }
-.cellcard.full img { height: auto; max-height: 56vh; object-fit: contain; background: #17140f; }
+/* contain, not cover: the cell details are all different shapes (760x716
+   for most, 440x200 for the Finish square) and cropping them hid parts
+   of the woodblock. */
+.cellcard img { width: 100%; display: block; background: #17140f;
+  height: clamp(190px, 30vh, 330px); object-fit: contain; }
+.cellcard .imgwrap {
+  border-bottom: 1px solid var(--line); position: relative; background: #17140f;
+  background-image: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(201,162,39,.07), transparent 75%);
+}
+.cellcard.full img { height: auto; max-height: 60vh; object-fit: contain; background: #17140f; }
 .cellcard .num {
   position: absolute; top: .5rem; left: .5rem;
   background: rgba(20,16,12,.82); color: var(--paper);
@@ -359,7 +381,7 @@ table.tbl tr:hover td { background: rgba(201,162,39,.06); }
   padding: 0; overflow: hidden; text-align: left; transition: .15s;
 }
 .cellgrid button:hover { border-color: var(--gold); transform: translateY(-2px); }
-.cellgrid img { width: 100%; aspect-ratio: 11/9; object-fit: cover; display: block; background: #d8ccb4; }
+.cellgrid img { width: 100%; aspect-ratio: 11/9; object-fit: contain; display: block; background: #17140f; }
 .cellgrid .lbl { padding: .4rem .55rem .5rem; }
 .cellgrid .lbl .jp { font-size: .95rem; color: var(--paper); }
 .cellgrid .lbl small { display: block; color: var(--ink-faint); font-size: .74rem; }
@@ -371,3 +393,110 @@ table.tbl tr:hover td { background: rgba(201,162,39,.06); }
 }
 .sitefoot .credit { color: var(--ink-dim); }
 .sitefoot .credit b { color: var(--ink); font-weight: 600; }
+
+/* ================= FURIGANA =================================== */
+ruby { ruby-position: over; -webkit-ruby-position: before; }
+ruby rt {
+  font-family: var(--jp); font-size: .48em; font-weight: 400; font-style: normal;
+  color: var(--gold); opacity: .82; letter-spacing: .02em; text-align: center;
+}
+
+/* ruby needs vertical room; give the line boxes that carry it some air */
+html.furigana .cellcard .kanji { line-height: 1.75; }
+html.furigana .rolltable li,
+html.furigana .logbox .entry .tx,
+html.furigana .plist .p,
+html.furigana .turn-info .at,
+html.furigana .turn-info .msg,
+html.furigana .cellgrid .lbl,
+html.furigana .player-row .who,
+html.furigana .cellcard .inbound,
+html.furigana .res-card .role,
+html.furigana table.tbl td,
+html.furigana .modal-box p { line-height: 2.1; }
+
+/* ================= LANGUAGE BAR =============================== */
+.langbar {
+  display: flex; align-items: center; gap: .65rem;
+  margin-left: .3rem; padding-left: .75rem; border-left: 1px solid var(--line);
+}
+.furi-toggle { display: flex; align-items: center; gap: .32rem; font-size: .78rem; color: var(--ink-faint); cursor: pointer; }
+.furi-toggle input { accent-color: var(--gold); }
+.btn-lang { border-color: rgba(201,162,39,.55); color: var(--gold); }
+.btn-lang:hover:not(:disabled) { border-color: var(--gold); }
+
+/* the Japanese setting is a little denser than the serif English */
+html.lang-ja body { font-family: var(--jp); }
+html.lang-ja .btn, html.lang-ja input { font-family: var(--jp); }
+
+/* a translation made for this program rather than source material */
+.draft {
+  font-family: var(--sans); font-size: .6rem; font-style: normal; font-weight: 400;
+  letter-spacing: .06em; color: var(--ink-faint); white-space: nowrap; cursor: help;
+  border: 1px solid rgba(117,106,88,.45); border-radius: 4px; padding: 0 .3rem;
+  vertical-align: .14em;
+}
+
+/* ================= WHEEL ====================================== */
+#wheel { width: 190px; height: 190px; position: relative; flex: none; }
+@media (max-width: 420px) { #wheel { width: 158px; height: 158px; } }
+#wheel::after {
+  content: ''; position: absolute; inset: -5px; border-radius: 50%;
+  border: 2px solid rgba(201,162,39,.32); pointer-events: none;
+}
+#wheel.empty { opacity: .25; }
+.wheel-spin { width: 100%; height: 100%; will-change: transform; }
+.wheel-spin svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 6px 16px rgba(0,0,0,.5)); }
+
+.wheel-spin .sector { stroke: #17140f; stroke-width: 1.5; }
+.wheel-spin .s-a      { fill: #4a3f31; }
+.wheel-spin .s-b      { fill: #382f25; }
+.wheel-spin .s-finish { fill: #8a6f18; }
+.wheel-spin .s-retire { fill: #35604c; }
+.wheel-spin .s-monk   { fill: #8c3020; }
+
+.wheel-spin text { text-anchor: middle; fill: var(--paper); }
+.wheel-spin .lbl-die  { font-family: var(--sans); font-size: 19px; font-weight: 700; }
+.wheel-spin .lbl-name { font-family: var(--jp); font-size: 12px; fill: rgba(239,227,203,.88); }
+
+.wheel-pointer {
+  position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
+  width: 0; height: 0; z-index: 3;
+  border-left: 9px solid transparent; border-right: 9px solid transparent;
+  border-top: 17px solid var(--gold);
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,.65));
+}
+.wheel-hub {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  width: 28px; height: 28px; border-radius: 50%; z-index: 2;
+  background: linear-gradient(150deg, #fbf6ea, #ddd0b6);
+  border: 1px solid #b3a288; box-shadow: 0 2px 7px rgba(0,0,0,.55);
+}
+#wheel.landed .wheel-pointer { animation: ptr .55s ease; }
+@keyframes ptr {
+  0%,100% { transform: translateX(-50%) scale(1); }
+  35%     { transform: translateX(-50%) scale(1.32); }
+}
+
+/* ================= ODDS OF THE DESTINATION ==================== */
+.rolltable li.k-finish .pip { border-color: rgba(201,162,39,.8); color: var(--gold); }
+.rolltable li.k-retire .pip { border-color: rgba(78,139,111,.8); color: var(--jade); }
+.rolltable li.k-monk   .pip { border-color: rgba(194,69,45,.8);  color: var(--vermilion); }
+.rolltable li.hi .pip { background: var(--vermilion); border-color: var(--vermilion); color: #fff; }
+
+/* ================= ODDS & MISC ================================= */
+.plist .p .role { font-size: .8rem; color: var(--ink-dim); }
+.plist .p .role .jp { color: var(--paper); }
+.res-sum { margin: .6rem 0 0; color: var(--ink-dim); font-size: .92rem; }
+.res-card .role .jp { color: var(--paper); }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+@media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+.col-h { margin: 0 0 .3rem; color: var(--ink) !important; }
+ul.tight { margin: 0; padding-left: 1.1rem; font-size: .9rem; color: var(--ink-dim); }
+ul.tight .jp { color: var(--paper); }
+.chip { display: inline-block; width: .7em; height: .7em; border-radius: 50%; margin-right: .5em; }
+.turn-info .msg .miss.small { font-size: .82rem; }
+.turn-info .msg .spinning { color: var(--gold); font-style: italic; }
+.cellcard .inbound { margin-top: .8rem; }
+.cellcard .inbound b { color: var(--ink-dim); }
+.cellcard .en .draft, .cellcard .verse .draft, .cellcard .note .draft { margin-left: .3rem; }

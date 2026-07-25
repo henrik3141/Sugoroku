@@ -13,14 +13,19 @@
 
   <header class="masthead">
     <div>
-      <div class="title-jp">壽出世双六</div>
-      <div class="title-en">Kotobuki Shusse Sugoroku &middot; “Longevity &amp; Success” — a Tokugawa life-course game</div>
+      <div class="title-jp" id="title-jp">壽出世双六</div>
+      <div class="title-en" data-i18n="title.sub"></div>
     </div>
     <div class="spacer"></div>
     <nav>
-      <button class="btn btn-sm btn-ghost" id="nav-cells">Browse the 45 cells</button>
-      <button class="btn btn-sm btn-ghost" id="nav-odds">Fates of the six</button>
-      <button class="btn btn-sm btn-ghost" id="nav-about">About</button>
+      <button class="btn btn-sm btn-ghost" id="nav-cells" data-i18n="nav.cells"></button>
+      <button class="btn btn-sm btn-ghost" id="nav-odds" data-i18n="nav.odds"></button>
+      <button class="btn btn-sm btn-ghost" id="nav-about" data-i18n="nav.about"></button>
+      <span class="langbar">
+        <label class="furi-toggle"><input type="checkbox" id="tgl-furi" checked>
+          <span data-i18n="furigana.on"></span></label>
+        <button class="btn btn-sm btn-lang" id="lang-btn"></button>
+      </span>
     </nav>
   </header>
 
@@ -29,39 +34,33 @@
     <div class="setup-wrap">
 
       <div class="intro">
-        <p class="lede">In the Tokugawa period, a <span class="jp">双六</span> (sugoroku) print was not a race around a track. It was a
-        map of a life. You are born into a station, you roll, and the board tells you where a person of that
-        station could plausibly go next — up through headship, trade and scholarship, or down through the
-        pleasure quarters, bankruptcy and the begging bowl.</p>
+        <p class="lede" id="setup-lede"></p>
 
-        <p>Each player takes one of the six characters printed in the <b>Start</b> square and begins in that
-        character's own cell. On your turn you roll a die and read your <em>current</em> cell's instructions:
-        only certain numbers lead anywhere. Roll a number that isn't listed and nothing happens — roll again.</p>
+        <p data-i18n="setup.p2"></p>
 
-        <p>Three things can end a life course:<br>
-        <b>長者 (Finish)</b> — a wealthy house, you win &nbsp;·&nbsp;
-        <b>Cell 5 隠居</b> — honorable retirement &nbsp;·&nbsp;
-        <b>Cell 45 願人坊主</b> — the mendicant monk, game over.</p>
+        <p><span data-i18n="setup.p3"></span><br>
+          <span data-i18n="setup.end.finish"></span> &nbsp;·&nbsp;
+          <span data-i18n="setup.end.retire"></span> &nbsp;·&nbsp;
+          <span data-i18n="setup.end.monk"></span></p>
 
         <div class="board-preview">
           <img src="assets/board.jpg" alt="The Kotobuki Shusse Sugoroku board">
         </div>
 
-        <p class="print-credit">Board: <span class="jp">壽出世双六</span>, designed by Utagawa Kuniteru <span class="jp">（國輝画）</span>,
-        published by Eikyūdō <span class="jp">（榮久堂版）</span>. All cell artwork on this page is detail from that print.</p>
+        <p class="print-credit" id="print-credit"></p>
       </div>
 
       <div class="setup-card">
-        <h3>Players</h3>
+        <h3 data-i18n="setup.players"></h3>
         <div class="count-row" id="count-row"></div>
 
         <div class="player-rows" id="player-rows"></div>
 
-        <p class="assign-note" id="assign-note"></p>
+        <p class="assign-note" data-i18n="setup.assignNote"></p>
 
         <div class="setup-actions">
-          <button class="btn" id="btn-reroll">Roll for characters</button>
-          <button class="btn btn-primary" id="btn-start">Begin the game</button>
+          <button class="btn" id="btn-reroll" data-i18n="setup.reroll"></button>
+          <button class="btn btn-primary" id="btn-start" data-i18n="setup.start"></button>
         </div>
       </div>
 
@@ -77,37 +76,49 @@
           <img src="assets/board.jpg" alt="Kotobuki Shusse Sugoroku board print">
         </div>
         <div class="board-tools">
-          <label><input type="checkbox" id="tgl-num" checked> show cell numbers</label>
+          <label><input type="checkbox" id="tgl-num" checked> <span data-i18n="board.showNums"></span></label>
           <span class="spacer" style="flex:1"></span>
-          <span>click any cell to read it</span>
+          <span data-i18n="board.clickHint"></span>
         </div>
       </div>
 
       <div class="panel-col">
 
         <div class="card turn-card" id="turn-card">
-          <div class="die" id="die"></div>
+          <div class="chance">
+            <div id="wheel"></div>
+            <div class="die" id="die"></div>
+          </div>
           <div class="turn-info">
             <div class="whose" id="turn-whose"></div>
             <div class="at" id="turn-at"></div>
             <div class="msg" id="turn-msg"></div>
           </div>
           <div class="turn-actions">
-            <button class="btn btn-primary" id="btn-roll">Roll the die</button>
-            <button class="btn btn-sm" id="btn-auto">Play out this life</button>
-            <button class="btn btn-sm btn-ghost" id="btn-quit">End game</button>
+            <button class="btn btn-primary" id="btn-roll"></button>
+            <button class="btn btn-sm" id="btn-auto" data-i18n="btn.auto"></button>
+            <button class="btn btn-sm btn-ghost" id="btn-quit" data-i18n="btn.quit"></button>
+          </div>
+          <div class="mode">
+            <span class="mode-label" data-i18n="mode.label"></span>
+            <span class="seg" id="mode-row">
+              <button data-mode="wheel" data-i18n="mode.wheel"></button>
+              <button data-mode="die" data-i18n="mode.die"></button>
+            </span>
+            <span class="mode-hint" id="mode-hint"></span>
           </div>
         </div>
 
         <div class="card">
-          <div class="card-h">Life courses <span class="spacer"></span><span id="turn-count"></span></div>
+          <div class="card-h"><span data-i18n="game.lifecourses"></span>
+            <span class="spacer"></span><span id="turn-count"></span></div>
           <div class="plist" id="plist"></div>
         </div>
 
         <div class="card cellcard" id="cellcard"></div>
 
         <div class="card">
-          <div class="card-h">Record</div>
+          <div class="card-h" data-i18n="game.record"></div>
           <div class="logbox" id="logbox"></div>
         </div>
 
@@ -118,12 +129,12 @@
   <!-- ================= RESULTS ================= -->
   <section class="screen" id="screen-results">
     <div class="results">
-      <h2>上がり</h2>
-      <p class="sub">Every life course has come to rest.</p>
+      <h2 data-i18n="results.h"></h2>
+      <p class="sub" data-i18n="results.sub"></p>
       <div id="res-list"></div>
       <div class="actions">
-        <button class="btn btn-primary" id="btn-again">Play again</button>
-        <button class="btn" id="btn-odds2">Compare with the odds</button>
+        <button class="btn btn-primary" id="btn-again" data-i18n="btn.again"></button>
+        <button class="btn" id="btn-odds2" data-i18n="btn.odds2"></button>
       </div>
     </div>
   </section>
@@ -131,20 +142,25 @@
 </div>
 
 <footer class="sitefoot">
-  <p class="credit">Concept &amp; Idea by <b>Tristan Grunow</b> &nbsp;·&nbsp; Implementation by <b>Henrik Bachmann</b></p>
-  <p>G30 History, Nagoya University. Board and cell texts from the course game packet;
-     artwork from <span class="jp">壽出世双六</span> by Utagawa Kuniteru.</p>
+  <p class="credit" data-i18n="foot.credit"></p>
+  <p id="foot-note"></p>
 </footer>
 
 <!-- ================= MODAL ================= -->
 <div class="modal" id="modal">
   <div class="modal-box">
-    <button class="btn btn-sm close" id="modal-close">Close</button>
+    <button class="btn btn-sm close" id="modal-close" data-i18n="modal.close"></button>
     <div id="modal-body"></div>
   </div>
 </div>
 
-<script src="js/data.js"></script>
+<script src="js/boot.js"></script>
+<script src="data/cells.js"></script>
+<script src="data/characters.js"></script>
+<script src="data/board.js"></script>
+<script src="data/ui.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/wheel.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>

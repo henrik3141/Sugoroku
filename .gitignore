@@ -1,2 +1,5 @@
 .DS_Store
 _test.html
+
+# course handouts kept locally for reference, not part of the site
+*.pdf

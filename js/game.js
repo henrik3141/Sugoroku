@@ -1,19 +1,30 @@
 /* ==================================================================
    壽出世双六 — Kotobuki Shusse Sugoroku
    Game engine + board UI.  No dependencies, runs from file://
+
+   All content lives in data/*.js; all wording goes through
+   SUGOROKU.i18n, so the whole page can switch language at any moment
+   without losing the game in progress.
    ================================================================== */
 (function () {
 'use strict';
+
+const CELLS      = SUGOROKU.cells;
+const CHARACTERS = SUGOROKU.characters;
+const COORDS     = SUGOROKU.coords;
+const I          = SUGOROKU.i18n;
+const { t, txt, jp, numOf, esc } = I;
 
 const $  = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const KEYS = Object.keys(CELLS);                       // '1'..'45','F'
 const TERMINAL = k => !CELLS[k] || Object.keys(CELLS[k].rolls).length === 0;
-const ENDINGS = {
-  finish: { label: 'Finish',      cls: 'win',    verb: 'reached 長者 — the wealthy house. A winning life.' },
-  retire: { label: 'Retirement',  cls: 'retire', verb: 'withdrew into 隠居, honorable retirement.' },
-  monk:   { label: 'Mendicant',   cls: 'monk',   verb: 'ended as a 願人坊主, a begging monk. Game over.' }
-};
+
+/* die number -> destination, sorted, as [[die, to], …] */
+const optionsOf = k => Object.entries(CELLS[k].rolls).sort((a, b) => a[0] - b[0]);
+
+/* which of the three endings a cell is, or 'normal' */
+const kindOf = k => CELLS[k] && CELLS[k].ending ? CELLS[k].ending : 'normal';
 
 /* ---------------------------------------------------------------
    1.  Exact analysis of the board (absorbing Markov chain)
@@ -31,10 +42,10 @@ const ANALYSIS = (function () {
     M[i][i] = 1;
     const outs = Object.values(CELLS[k].rolls).map(String);
     const p = 1 / outs.length;
-    outs.forEach(t => {
-      const a = abs.indexOf(t);
+    outs.forEach(to => {
+      const a = abs.indexOf(to);
       if (a >= 0) M[i][n + a] += p;
-      else M[i][ix[t]] -= p;
+      else M[i][ix[to]] -= p;
     });
     M[i][n + 3] = 1;
   });
@@ -42,7 +53,7 @@ const ANALYSIS = (function () {
   for (let c = 0; c < n; c++) {                        // Gauss-Jordan
     let piv = c;
     for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r;
-    const t = M[c]; M[c] = M[piv]; M[piv] = t;
+    const tmp = M[c]; M[c] = M[piv]; M[piv] = tmp;
     const d = M[c][c];
     for (let j = c; j < w; j++) M[c][j] /= d;
     for (let r = 0; r < n; r++) {
@@ -63,8 +74,8 @@ const ANALYSIS = (function () {
 /* cells that lead into a given cell — a factual, useful cross-reference */
 const INBOUND = (function () {
   const m = {}; KEYS.forEach(k => m[k] = []);
-  KEYS.forEach(k => Object.values(CELLS[k].rolls).forEach(t => {
-    if (!m[String(t)].includes(k)) m[String(t)].push(k);
+  KEYS.forEach(k => Object.values(CELLS[k].rolls).forEach(to => {
+    if (!m[String(to)].includes(k)) m[String(to)].push(k);
   }));
   return m;
 })();
@@ -72,13 +83,39 @@ const INBOUND = (function () {
 /* ---------------------------------------------------------------
    2.  Small helpers
 --------------------------------------------------------------- */
-const img     = k => k === 'F' ? 'assets/finish.jpg' : 'assets/cell' + String(k).padStart(2, '0') + '.jpg';
-const numOf   = k => k === 'F' ? 'Finish' : 'Cell ' + k;
-const nameOf  = k => `<span class="jp">${CELLS[k].kanji}</span> ${CELLS[k].en}`;
-const pct     = x => (x * 100).toFixed(0) + '%';
-const esc     = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-const d6      = () => 1 + Math.floor(Math.random() * 6);
-const sleep   = ms => new Promise(r => setTimeout(r, ms));
+const img   = k => k === 'F' ? 'assets/finish.jpg' : 'assets/cell' + String(k).padStart(2, '0') + '.jpg';
+const pct   = x => (x * 100).toFixed(0) + '%';
+const d6    = () => 1 + Math.floor(Math.random() * 6);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const pick  = n => Math.floor(Math.random() * n);
+
+const cellName = k => I.plain(CELLS[k].name);
+const charName = c => I.plain(c.name);
+
+/* How a cell or character is named in running text.
+   In English the kanji needs a gloss beside it.  In Japanese the kanji
+   IS the name — appending the modern gloss would only produce
+   "女郎買 女郎買い", so the gloss is left to the cell card. */
+const labelOf   = k => I.lang === 'en' ? `${jp(CELLS[k])} ${esc(cellName(k))}` : jp(CELLS[k]);
+const charLabel = c => I.lang === 'en' ? `${jp(c)} ${esc(charName(c))}` : jp(c);
+
+const draftTag = () =>
+  ` <span class="draft" title="${esc(t('card.draft.title'))}">〈${esc(t('card.draft'))}〉</span>`;
+
+/* a { en, ja, jaDraft } field as a paragraph, marked if it is a draft */
+function fieldHTML(field, cls) {
+  const r = txt(field);
+  if (!r || !r.text) return '';
+  return `<p class="${cls}">${esc(r.text)}${r.draft ? draftTag() : ''}</p>`;
+}
+
+const ENDINGS = {
+  finish: { cls: 'win'    },
+  retire: { cls: 'retire' },
+  monk:   { cls: 'monk'   }
+};
+const endLabel = e => t('end.' + e + '.label');
+const endVerb  = e => t('end.' + e + '.verb');
 
 const PIPS = {
   1: [[2, 2]], 2: [[1, 1], [3, 3]], 3: [[1, 1], [2, 2], [3, 3]],
@@ -94,17 +131,47 @@ function drawDie(el, v, hit) {
    3.  Game state
 --------------------------------------------------------------- */
 const G = {
-  players: [],      // {name, ch, at, path:[{cell,die}], done:null|'finish'|'retire'|'monk'}
+  players: [],      // {name, ch, at, path:[…], done:null|'finish'|'retire'|'monk'}
   turn: 0,
   round: 1,
   selected: null,
   busy: false,
   auto: false,
-  showNums: true
+  showNums: true,
+  mode: 'wheel',    // 'wheel' | 'die'
+  cardOpts: null,   // options the cell card was last drawn with
+  msgFn: null,      // () => html, re-run when the language changes
+  log: []           // [{fn, pi, big}] — same, so the record can be re-read
 };
 
+let wheel = null;
+
 /* ---------------------------------------------------------------
-   4.  Setup screen
+   4.  Static interface text
+--------------------------------------------------------------- */
+function applyStatic() {
+  $$('[data-i18n]').forEach(el => { el.innerHTML = t(el.dataset.i18n); });
+  $$('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  $$('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+
+  const sug = `<span class="jp">${I.ruby('双六', 'すごろく')}</span>`;
+  const title = `<span class="jp">${I.ruby('壽出世双六', 'ことぶきしゅっせすごろく')}</span>`;
+  const kuniteru = `<span class="jp">（${I.ruby('國輝画', 'くにてるが')}）</span>`;
+  const eikyudo  = `<span class="jp">（${I.ruby('榮久堂版', 'えいきゅうどうばん')}）</span>`;
+
+  $('#setup-lede').innerHTML = t('setup.lede', { sugoroku: sug });
+  $('#print-credit').innerHTML = t('setup.printCredit', { title, eikyudo, kuniteru });
+  $('#foot-note').innerHTML = t('foot.note', { title });
+  $('#title-jp').innerHTML = I.ruby('壽出世双六', 'ことぶきしゅっせすごろく');
+
+  $('#lang-btn').textContent = t('lang.switch');
+  $('#lang-btn').title = t('lang.switch.title');
+  $('#mode-hint').textContent = t('mode.hint.' + G.mode);
+  $('#btn-roll').textContent = t(G.mode === 'wheel' ? 'btn.spin' : 'btn.roll');
+}
+
+/* ---------------------------------------------------------------
+   5.  Setup screen
 --------------------------------------------------------------- */
 let setupCount = 3, setupChars = [], setupNames = [];
 
@@ -131,18 +198,16 @@ function renderSetupPlayers() {
   $('#player-rows').innerHTML = setupChars.map((c, i) => `
     <div class="player-row">
       <span class="swatch" style="background:${c.color}"></span>
-      <input type="text" data-i="${i}" placeholder="Player ${i + 1}" value="${esc(setupNames[i] || '')}">
-      <span class="who">rolled <b>${c.die}</b> — <span class="jp">${c.kanji}</span> ${c.en}
-        <br><span style="opacity:.7">starts in cell ${c.start}</span></span>
+      <input type="text" data-i="${i}" placeholder="${esc(t('setup.playerName', { n: i + 1 }))}"
+             value="${esc(setupNames[i] || '')}">
+      <span class="who">${t('setup.rolled', { die: c.die })} — ${charLabel(c)}
+        <br><span style="opacity:.7">${t('setup.startsIn', { cell: numOf(c.start) })}</span></span>
     </div>`).join('');
   $$('#player-rows input').forEach(inp => inp.oninput = () => setupNames[+inp.dataset.i] = inp.value);
-  $('#assign-note').innerHTML =
-    `Characters are drawn exactly as the packet says: roll a die, re-roll if that character is already taken. ` +
-    `Roll again for a different draw, or just begin.`;
 }
 
 /* ---------------------------------------------------------------
-   5.  Board
+   6.  Board
 --------------------------------------------------------------- */
 function buildBoard() {
   const f = $('#board-frame');
@@ -155,10 +220,10 @@ function buildBoard() {
     s.style.left = x + '%'; s.style.top = y + '%';
     s.dataset.k = k;
     s.textContent = k === 'F' ? '上' : k;
-    s.title = `${numOf(k)} — ${CELLS[k].kanji} ${CELLS[k].en}`;
     s.onclick = () => selectCell(k);
     f.appendChild(s);
   });
+  labelBoard();
 
   G.players.forEach((p, i) => {
     const el = document.createElement('div');
@@ -170,6 +235,14 @@ function buildBoard() {
   });
   placePawns();
   applyNumberToggle();
+}
+
+/* tooltips depend on the language, so they are refreshed on their own */
+function labelBoard() {
+  $$('#board-frame .cellspot').forEach(s => {
+    const k = s.dataset.k;
+    s.title = `${numOf(k)} — ${CELLS[k].kanji} ${cellName(k)}`;
+  });
 }
 
 function placePawns() {
@@ -196,13 +269,13 @@ function applyNumberToggle() {
 function highlightTargets(k) {
   $$('.cellspot').forEach(s => s.classList.remove('target'));
   if (!k) return;
-  new Set(Object.values(CELLS[k].rolls).map(String)).forEach(t => {
-    const el = $(`.cellspot[data-k="${t}"]`); if (el) el.classList.add('target');
+  new Set(Object.values(CELLS[k].rolls).map(String)).forEach(to => {
+    const el = $(`.cellspot[data-k="${to}"]`); if (el) el.classList.add('target');
   });
 }
 
 /* ---------------------------------------------------------------
-   6.  Cell card
+   7.  Cell card
 --------------------------------------------------------------- */
 function selectCell(k) {
   G.selected = k;
@@ -213,92 +286,119 @@ function selectCell(k) {
 function cellCardHTML(k, opts) {
   opts = opts || {};
   const c = CELLS[k], a = ANALYSIS[k];
-  const rolls = Object.entries(c.rolls).sort((p, q) => p[0] - q[0]);
+  const nameRes = txt(c.name);
 
-  let h = `<div class="imgwrap"><img src="${img(k)}" alt="${c.en}">
+  let h = `<div class="imgwrap"><img src="${img(k)}" alt="${esc(cellName(k))}">
              <span class="num">${numOf(k)}</span></div>
            <div class="body">
-             <div class="kanji">${c.kanji}</div>
-             <div class="rom">${c.romaji}</div>
-             <div class="en">${c.en}</div>`;
+             <div class="kanji">${jp(c)}</div>`;
 
-  if (c.verse) h += `<p class="verse">${esc(c.verse)}</p>`;
-  if (c.note)  h += `<p class="note">${esc(c.note)}</p>`;
+  if (I.lang === 'en') h += `<div class="rom">${esc(c.romaji)}</div>`;
+  h += `<div class="en">${esc(nameRes.text)}${nameRes.draft ? draftTag() : ''}</div>`;
+
+  h += fieldHTML(c.verse, 'verse');
+  h += fieldHTML(c.note, 'note');
 
   if (TERMINAL(k)) {
-    h += `<div class="term-flag">${
-      k === 'F' ? 'This is the goal. Landing here ends your life course as a winner.'
-                : 'Landing here ends your life course — there is no roll out of this cell.'}</div>`;
+    h += `<div class="term-flag">${t(k === 'F' ? 'card.termFinish' : 'card.termOther')}</div>`;
   } else {
-    h += `<div class="rolltable"><h4>Rolls</h4><ul>` + rolls.map(([d, t]) =>
-      `<li class="${opts.hi == d ? 'hi' : ''}"><span class="pip">${d}</span>
-         <span class="to">go to <b>${numOf(t)}</b> — ${nameOf(String(t))}</span></li>`).join('') +
-      `</ul><p class="dead">Any other number: nothing happens — roll again.</p></div>`;
+    const rolls = optionsOf(k);
+    h += `<div class="rolltable"><h4>${t(G.mode === 'wheel' ? 'card.rollsWheel' : 'card.rolls')}</h4><ul>` +
+      rolls.map(([d, to]) =>
+        `<li class="${opts.hi == d ? 'hi' : ''} k-${kindOf(to)}"><span class="pip">${d}</span>
+           <span class="to">${t('card.goto', { cell: numOf(to), name: labelOf(String(to)) })}</span></li>`).join('') +
+      `</ul><p class="dead">${t('card.eachEqually', { n: rolls.length })}${
+        G.mode === 'die' ? '<br>' + t('card.dead') : ''}</p></div>`;
   }
 
   if (a && !TERMINAL(k)) {
-    h += `<div class="odds"><h4>From here, in the long run</h4>
+    h += `<div class="odds"><h4>${t('card.odds.h')}</h4>
       <div class="bar">
         <span class="b-fin"  style="width:${a.finish * 100}%"></span>
         <span class="b-ret"  style="width:${a.retire * 100}%"></span>
         <span class="b-monk" style="width:${a.monk * 100}%"></span>
       </div>
       <div class="legend">
-        <span><i style="background:var(--gold)"></i>${pct(a.finish)} finish</span>
-        <span><i style="background:var(--jade)"></i>${pct(a.retire)} retirement</span>
-        <span><i style="background:var(--vermilion)"></i>${pct(a.monk)} mendicant</span>
+        <span><i style="background:var(--gold)"></i>${t('card.odds.finish', { p: pct(a.finish) })}</span>
+        <span><i style="background:var(--jade)"></i>${t('card.odds.retire', { p: pct(a.retire) })}</span>
+        <span><i style="background:var(--vermilion)"></i>${t('card.odds.monk', { p: pct(a.monk) })}</span>
       </div>
-      <p class="exp">Expected further moves: ${a.turns.toFixed(1)}</p></div>`;
+      <p class="exp">${t('card.expected', { n: a.turns.toFixed(1) })}</p></div>`;
   }
 
   const inb = INBOUND[k];
   if (inb.length) {
-    h += `<p class="note" style="margin-top:.8rem"><b style="color:var(--ink-dim)">Reached from:</b> ` +
-      inb.sort((p, q) => (p === 'F' ? 99 : +p) - (q === 'F' ? 99 : +q))
-         .map(s => `${numOf(s)} <span class="jp">${CELLS[s].kanji}</span>`).join(' · ') + `</p>`;
+    h += `<p class="note inbound"><b>${t('card.reachedFrom')}</b> ` +
+      inb.slice().sort((p, q) => (p === 'F' ? 99 : +p) - (q === 'F' ? 99 : +q))
+         .map(s => `${numOf(s)} ${jp(CELLS[s])}`).join(' · ') + `</p>`;
   } else {
-    h += `<p class="note" style="margin-top:.8rem"><i>No cell on the board leads here — it can only be a starting square.</i></p>`;
+    h += `<p class="note inbound"><i>${t('card.noInbound')}</i></p>`;
   }
 
   return h + `</div>`;
 }
 
-function renderCellCard(k, opts) { $('#cellcard').innerHTML = cellCardHTML(k, opts); }
+function renderCellCard(k, opts) {
+  G.cardOpts = opts || null;
+  $('#cellcard').innerHTML = cellCardHTML(k, opts);
+}
 
 /* ---------------------------------------------------------------
-   7.  Turn logic
+   8.  Turn logic
 --------------------------------------------------------------- */
-function log(html, pi, big) {
-  const p = pi != null ? G.players[pi] : null;
-  const el = document.createElement('div');
-  el.className = 'entry' + (big ? ' big' : '');
-  el.innerHTML = `<span class="dot" style="background:${p ? p.ch.color : 'transparent'}"></span><span class="tx">${html}</span>`;
-  const box = $('#logbox'); box.appendChild(el); box.scrollTop = box.scrollHeight;
+function pushLog(fn, pi, big) {
+  G.log.push({ fn, pi, big });
+  renderLog();
+}
+
+function renderLog() {
+  const box = $('#logbox');
+  box.innerHTML = G.log.map(({ fn, pi, big }) => {
+    const p = pi != null ? G.players[pi] : null;
+    return `<div class="entry${big ? ' big' : ''}">
+      <span class="dot" style="background:${p ? p.ch.color : 'transparent'}"></span>
+      <span class="tx">${fn()}</span></div>`;
+  }).join('');
+  box.scrollTop = box.scrollHeight;
 }
 
 function renderPlayers() {
   $('#plist').innerHTML = G.players.map((p, i) => {
-    const end = p.done ? ENDINGS[p.done] : null;
+    const end = p.done;
     return `<div class="p ${i === G.turn && !p.done ? 'now' : ''} ${p.done ? 'out' : ''}">
       <span class="swatch" style="background:${p.ch.color}"></span>
-      <span class="nm">${esc(p.name)}<br><span style="font-size:.8rem;color:var(--ink-dim)">
-        <span class="jp">${p.ch.kanji}</span> ${p.ch.en}</span></span>
-      <span class="loc">${end ? `<span class="badge ${end.cls}">${end.label}</span>`
-        : `${numOf(p.at)}<br><span class="jp">${CELLS[p.at].kanji}</span>`}</span>
+      <span class="nm">${esc(p.name)}<br><span class="role">${charLabel(p.ch)}</span></span>
+      <span class="loc">${end ? `<span class="badge ${ENDINGS[end].cls}">${esc(endLabel(end))}</span>`
+        : `${numOf(p.at)}<br>${jp(CELLS[p.at])}`}</span>
     </div>`;
   }).join('');
-  $('#turn-count').textContent = 'round ' + G.round;
+  $('#turn-count').textContent = t('game.round', { n: G.round });
 }
 
-function renderTurn(msg) {
+/* Draw the wheel for whichever cell the current player stands in. */
+function renderWheel() {
+  if (!wheel) return;
+  const p = G.players[G.turn];
+  if (!p || p.done || TERMINAL(p.at)) { wheel.render([]); return; }
+  wheel.reset();
+  wheel.render(optionsOf(p.at).map(([die, to]) => ({
+    die, kanji: CELLS[to].kanji, kind: kindOf(to)
+  })));
+}
+
+function setMsg(fn) {
+  G.msgFn = fn;
+  $('#turn-msg').innerHTML = fn ? fn() : '';
+}
+
+function renderTurn(msgFn) {
   const p = G.players[G.turn];
   $('#turn-whose').innerHTML =
     `<span class="dot" style="background:${p.ch.color}"></span>${esc(p.name)}`;
   $('#turn-at').innerHTML =
-    `<span class="jp">${p.ch.kanji}</span> ${p.ch.en} &nbsp;·&nbsp; now in ${numOf(p.at)}
-     <span class="jp">${CELLS[p.at].kanji}</span>`;
-  if (msg !== undefined) $('#turn-msg').innerHTML = msg;
-  renderPlayers(); placePawns(); highlightTargets(p.at);
+    `${charLabel(p.ch)} &nbsp;·&nbsp; ${t('turn.nowIn', { cell: numOf(p.at) + ' ' + jp(CELLS[p.at]) })}`;
+  if (msgFn !== undefined) setMsg(msgFn);
+  renderPlayers(); placePawns(); highlightTargets(p.at); renderWheel();
 }
 
 async function takeTurn(auto) {
@@ -308,28 +408,40 @@ async function takeTurn(auto) {
 
   G.busy = true; $('#btn-roll').disabled = true; $('#btn-auto').disabled = true;
 
-  const rolls = CELLS[p.at].rolls;
-  let misses = [], v, hit = false;
-  const die = $('#die');
+  const from = p.at;
+  const opts = optionsOf(from);
+  let v, to, misses = [];
 
-  while (!hit) {
-    v = d6();
-    die.classList.remove('rolling'); void die.offsetWidth; die.classList.add('rolling');
-    hit = rolls[v] !== undefined;
-    drawDie(die, v, hit);
-    if (!hit) {
-      misses.push(v);
-      $('#turn-msg').innerHTML =
-        `<span class="miss">Rolled ${v} — no path from ${numOf(p.at)}. Roll again.</span>` +
-        (misses.length > 1 ? `<br><span class="miss" style="font-size:.82rem">misses: ${misses.join(', ')}</span>` : '');
-      await sleep(auto ? 240 : 420);
+  if (G.mode === 'wheel') {
+    const i = pick(opts.length);
+    v = opts[i][0]; to = String(opts[i][1]);
+    setMsg(() => `<span class="spinning">${t('turn.spinning')}</span>`);
+    await wheel.spin(i, auto ? 1100 : 3000);
+    setMsg(() => `<span class="hit">${t('turn.hit.wheel', {
+      v, cell: `${numOf(to)} ${labelOf(to)}` })}</span>`);
+  } else {
+    const rolls = CELLS[from].rolls;
+    const die = $('#die');
+    let hit = false;
+    while (!hit) {
+      v = d6();
+      die.classList.remove('rolling'); void die.offsetWidth; die.classList.add('rolling');
+      hit = rolls[v] !== undefined;
+      drawDie(die, v, hit);
+      if (!hit) {
+        misses.push(v);
+        const missed = misses.slice(), last = v;
+        setMsg(() => `<span class="miss">${t('turn.miss', { v: last, cell: numOf(from) })}</span>` +
+          (missed.length > 1 ? `<br><span class="miss small">${t('turn.misses', { list: missed.join(', ') })}</span>` : ''));
+        await sleep(auto ? 240 : 420);
+      }
     }
+    to = String(rolls[v]);
+    setMsg(() => `<span class="hit">${t('turn.hit.die', {
+      v, cell: `${numOf(to)} ${labelOf(to)}` })}</span>`);
   }
 
-  const from = p.at, to = String(rolls[v]);
   renderCellCard(from, { hi: v });
-  $('#turn-msg').innerHTML = `<span class="hit">Rolled <b>${v}</b> → ${numOf(to)}
-     <span class="jp">${CELLS[to].kanji}</span> ${CELLS[to].en}</span>`;
   await sleep(auto ? 320 : 560);
 
   p.at = to;
@@ -338,12 +450,18 @@ async function takeTurn(auto) {
   await sleep(280);
   selectCell(to);
 
-  log(`<b>${esc(p.name)}</b> rolled ${v}${misses.length ? ` <span style="opacity:.65">(after ${misses.join(', ')})</span>` : ''} —
-       ${numOf(from)} → ${numOf(to)} <span class="jp">${CELLS[to].kanji}</span> ${CELLS[to].en}`, G.turn);
+  const rec = { name: p.name, v, misses: misses.slice(), from, to, mode: G.mode };
+  pushLog(() => t(rec.mode === 'wheel' ? 'log.move.wheel' : 'log.move.die', {
+    name: esc(rec.name), v: rec.v,
+    after: rec.misses.length ? t('log.after', { list: rec.misses.join(', ') }) : '',
+    from: numOf(rec.from),
+    to: `${numOf(rec.to)} ${labelOf(rec.to)}`
+  }), G.turn);
 
   if (TERMINAL(to)) {
     p.done = CELLS[to].ending;
-    log(`<b>${esc(p.name)}</b> ${ENDINGS[p.done].verb}`, G.turn, true);
+    const nm = p.name, en = p.done;
+    pushLog(() => t('log.ended', { name: esc(nm), verb: endVerb(en) }), G.turn, true);
   }
 
   G.busy = false; $('#btn-roll').disabled = false; $('#btn-auto').disabled = false;
@@ -375,6 +493,7 @@ function nextPlayer() {
 async function autoPlay() {
   if (G.auto || G.busy) return;
   G.auto = true;
+  $('#btn-auto').disabled = true;
   const me = G.turn;
   while (!G.players[me].done && G.turn === me) {
     const ended = await takeTurn(true);
@@ -382,10 +501,11 @@ async function autoPlay() {
     await sleep(180);
   }
   G.auto = false;
+  $('#btn-auto').disabled = false;
 }
 
 /* ---------------------------------------------------------------
-   8.  Results
+   9.  Results
 --------------------------------------------------------------- */
 function showResults() {
   const order = { finish: 0, retire: 1, monk: 2 };
@@ -393,26 +513,26 @@ function showResults() {
     order[a.p.done] - order[b.p.done] || a.p.path.length - b.p.path.length);
 
   $('#res-list').innerHTML = sorted.map(({ p }) => {
-    const end = ENDINGS[p.done];
+    const end = p.done;
     const a0 = ANALYSIS[String(p.ch.start)];
-    const steps = [{ cell: String(p.ch.start), die: null }].concat(p.path);
+    const steps = [{ cell: String(p.ch.start) }].concat(p.path);
     return `<div class="res-card">
       <div class="top">
         <span class="swatch" style="background:${p.ch.color}"></span>
         <span class="nm">${esc(p.name)}</span>
-        <span class="role">born as <span class="jp">${p.ch.kanji}</span> ${p.ch.en}</span>
+        <span class="role">${t('results.bornAs', { ch: `${charLabel(p.ch)}` })}</span>
         <span class="spacer"></span>
-        <span class="badge ${end.cls}">${end.label}</span>
+        <span class="badge ${ENDINGS[end].cls}">${esc(endLabel(end))}</span>
       </div>
-      <p style="margin:.6rem 0 0;color:var(--ink-dim);font-size:.92rem">
-        ${esc(p.name)} ${end.verb} &nbsp;·&nbsp; ${p.path.length} moves.
-        A ${p.ch.en.toLowerCase()} reaches the Finish square ${pct(a0.finish)} of the time.</p>
+      <p class="res-sum">${t('results.summary', {
+        name: esc(p.name), verb: endVerb(end), n: p.path.length,
+        role: esc(charName(p.ch)), p: pct(a0.finish) })}</p>
       <div class="path">${steps.map((s, i) => {
         const k = s.cell, last = i === steps.length - 1;
         const cls = last ? (p.done === 'finish' ? 'fin' : p.done === 'monk' ? 'bad' : '') : '';
         return (i ? `<span class="arrow">→</span>` : '') +
           `<button class="step ${cls}" data-k="${k}"><span class="n">${k === 'F' ? '上' : k}</span>
-             <span class="jp">${CELLS[k].kanji}</span></button>`;
+             <span class="jp">${esc(CELLS[k].kanji)}</span></button>`;
       }).join('')}</div>
     </div>`;
   }).join('');
@@ -422,44 +542,60 @@ function showResults() {
 }
 
 /* ---------------------------------------------------------------
-   9.  Modals
+   10.  Modals
 --------------------------------------------------------------- */
-function openModal(html) { $('#modal-body').innerHTML = html; $('#modal').classList.add('open'); }
-function closeModal() { $('#modal').classList.remove('open'); }
+let modalRender = null;                 // redrawn when the language changes
+
+function openModal(fn) {
+  modalRender = fn;
+  $('#modal-body').innerHTML = fn();
+  $('#modal').classList.add('open');
+  if (modalWire) modalWire();
+}
+let modalWire = null;
+
+function closeModal() { $('#modal').classList.remove('open'); modalRender = null; modalWire = null; }
 
 function openCellModal(k) {
-  openModal(`<h2>${numOf(k)}</h2>
+  modalWire = () => { const b = $('#back-grid'); if (b) b.onclick = openCellsModal; };
+  openModal(() => `<h2>${numOf(k)}</h2>
     <div class="card cellcard full" style="margin-top:1rem">${cellCardHTML(k)}</div>
-    <div style="margin-top:1rem"><button class="btn btn-sm" id="back-grid">← All cells</button></div>`);
-  $('#back-grid').onclick = openCellsModal;
+    <div style="margin-top:1rem"><button class="btn btn-sm" id="back-grid">${t('cells.back')}</button></div>`);
 }
 
 function openCellsModal() {
-  openModal(`<h2>The forty-five cells</h2>
-    <p>Every square of the print, with its verse and its roll table. Click to read.</p>
+  modalWire = () => $$('.cellgrid button').forEach(b => b.onclick = () => openCellModal(b.dataset.k));
+  openModal(() => `<h2>${t('cells.h')}</h2>
+    <p>${t('cells.sub')}</p>
     <div class="cellgrid">${KEYS.map(k => `
       <button data-k="${k}"><img src="${img(k)}" alt="" loading="lazy">
-        <span class="lbl"><span class="jp">${CELLS[k].kanji}</span>
-          <small>${numOf(k)} · ${CELLS[k].en}</small></span></button>`).join('')}</div>`);
-  $$('.cellgrid button').forEach(b => b.onclick = () => openCellModal(b.dataset.k));
+        <span class="lbl">${jp(CELLS[k])}
+          <small>${numOf(k)}${I.lang === 'en' ? ' · ' + esc(cellName(k)) : ''}</small></span></button>`).join('')}</div>`);
 }
 
 function openOddsModal() {
-  const rows = CHARACTERS.map(c => {
-    const a = ANALYSIS[String(c.start)];
-    return { c, a };
-  }).sort((x, y) => y.a.finish - x.a.finish);
+  modalWire = null;
+  openModal(() => {
+    const rows = CHARACTERS.map(c => ({ c, a: ANALYSIS[String(c.start)] }))
+      .sort((x, y) => y.a.finish - x.a.finish);
+    const katoku = CHARACTERS.find(c => c.romaji === 'Katoku');
+    const tedai  = CHARACTERS.find(c => c.romaji === 'Tedai');
 
-  openModal(`<h2>The fates of the six</h2>
-    <p>Because an unlisted roll is simply re-rolled, every arrow out of a cell is equally likely — which makes the
-    whole board an exactly solvable Markov chain. These are not simulations but the true probabilities, computed
-    from the roll tables of the print itself. Where you are born decides a great deal.</p>
+    const live = KEYS.filter(k => !TERMINAL(k));
+    const byFin  = live.slice().sort((a, b) => ANALYSIS[b].finish - ANALYSIS[a].finish);
+    const byMonk = live.slice().sort((a, b) => ANALYSIS[b].monk - ANALYSIS[a].monk);
+    const fmt = k => `<li><b>${numOf(k)}</b> ${labelOf(k)} —
+      ${t('odds.row', { p1: pct(ANALYSIS[k].finish), p2: pct(ANALYSIS[k].monk) })}</li>`;
+
+    return `<h2>${t('odds.h')}</h2>
+    <p>${t('odds.intro')}</p>
 
     <table class="tbl">
-      <tr><th>Character</th><th>Starts</th><th>Finish</th><th>Retirement</th><th>Mendicant</th><th style="width:110px"></th><th>Moves</th></tr>
+      <tr><th>${t('odds.th.character')}</th><th>${t('odds.th.starts')}</th><th>${t('odds.th.finish')}</th>
+          <th>${t('odds.th.retire')}</th><th>${t('odds.th.monk')}</th>
+          <th style="width:110px"></th><th>${t('odds.th.moves')}</th></tr>
       ${rows.map(({ c, a }) => `<tr>
-        <td><span style="display:inline-block;width:.7em;height:.7em;border-radius:50%;background:${c.color};margin-right:.5em"></span>
-            <span class="jp">${c.kanji}</span> ${c.en}</td>
+        <td><span class="chip" style="background:${c.color}"></span>${charLabel(c)}</td>
         <td>${c.start}</td>
         <td style="color:var(--gold)">${(a.finish * 100).toFixed(1)}%</td>
         <td>${(a.retire * 100).toFixed(1)}%</td>
@@ -471,26 +607,18 @@ function openOddsModal() {
         <td>${a.turns.toFixed(1)}</td></tr>`).join('')}
     </table>
 
-    <h3>What the numbers say</h3>
-    <p>The <span class="jp">家督</span> Family Head — a son who has already inherited — reaches the Finish square about
-    <b>${(ANALYSIS['18'].finish * 100).toFixed(0)}%</b> of the time. The <span class="jp">手代</span> Merchant Clerk, who must
-    work his way up through service, manages about <b>${(ANALYSIS['29'].finish * 100).toFixed(0)}%</b>, and is the most likely
-    of the six to end with the begging bowl. The print does not pretend that the six paths are equal.</p>
+    <h3>${t('odds.what.h')}</h3>
+    <p>${t('odds.what.p', {
+      katoku: jp(katoku), tedai: jp(tedai),
+      a: pct(ANALYSIS[String(katoku.start)].finish),
+      b: pct(ANALYSIS[String(tedai.start)].finish) })}</p>
 
-    <h3>The safest and the most dangerous squares</h3>
-    ${(() => {
-      const live = KEYS.filter(k => !TERMINAL(k));
-      const byFin = live.slice().sort((a, b) => ANALYSIS[b].finish - ANALYSIS[a].finish);
-      const byMonk = live.slice().sort((a, b) => ANALYSIS[b].monk - ANALYSIS[a].monk);
-      const fmt = k => `<li><b>${numOf(k)}</b> <span class="jp">${CELLS[k].kanji}</span> ${CELLS[k].en} —
-        ${pct(ANALYSIS[k].finish)} finish, ${pct(ANALYSIS[k].monk)} mendicant</li>`;
-      return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">
-        <div><p style="margin:0 0 .3rem;color:var(--ink)">Most likely to end in the wealthy house</p>
-          <ul style="margin:0;padding-left:1.1rem;font-size:.9rem;color:var(--ink-dim)">${byFin.slice(0, 5).map(fmt).join('')}</ul></div>
-        <div><p style="margin:0 0 .3rem;color:var(--ink)">Most likely to end with the begging bowl</p>
-          <ul style="margin:0;padding-left:1.1rem;font-size:.9rem;color:var(--ink-dim)">${byMonk.slice(0, 5).map(fmt).join('')}</ul></div>
-      </div>`;
-    })()}`);
+    <h3>${t('odds.safest.h')}</h3>
+    <div class="two-col">
+      <div><p class="col-h">${t('odds.safest.finish')}</p><ul class="tight">${byFin.slice(0, 5).map(fmt).join('')}</ul></div>
+      <div><p class="col-h">${t('odds.safest.monk')}</p><ul class="tight">${byMonk.slice(0, 5).map(fmt).join('')}</ul></div>
+    </div>`;
+  });
 }
 
 /* cells that no sequence of legal moves from any starting square can reach */
@@ -500,48 +628,34 @@ function unreachableCells() {
     const k = stack.pop();
     if (seen.has(k)) continue;
     seen.add(k);
-    Object.values(CELLS[k].rolls).forEach(t => stack.push(String(t)));
+    Object.values(CELLS[k].rolls).forEach(to => stack.push(String(to)));
   }
   return KEYS.filter(k => !seen.has(k));
 }
 
 function openAboutModal() {
-  const unreachable = unreachableCells();
-  openModal(`<h2>About this game</h2>
-    <p><span class="jp">壽出世双六</span> <i>Kotobuki Shusse Sugoroku</i> — “Longevity and Success sugoroku” — is an
-    Edo-period <i>e-sugoroku</i>: a printed board game in which the squares are not places but social positions.
-    Players do not race along a track. Each square lists only a few die numbers, and each of those sends you to a
-    particular other station in life. A clerk's board of possibilities is not a family head's.</p>
+  modalWire = null;
+  openModal(() => {
+    const unreachable = unreachableCells();
+    const title = `<span class="jp">${I.ruby('壽出世双六', 'ことぶきしゅっせすごろく')}</span>`;
+    const kuniteru = `<span class="jp">（${I.ruby('國輝画', 'くにてるが')}）</span>`;
+    const eikyudo  = `<span class="jp">（${I.ruby('榮久堂版', 'えいきゅうどうばん')}）</span>`;
 
-    <h3>How play works</h3>
-    <p>Roll a die to receive one of the six characters printed in the Start square, and begin in that character's own
-    cell. On your turn, roll and read your <em>current</em> cell: if the number is listed, move there; if it is not,
-    nothing happens and you roll again. Play ends when you reach <b>長者</b> (Finish, a wealthy house),
-    <b>Cell 5 隠居</b> (honorable retirement) or <b>Cell 45 願人坊主</b> (the mendicant monk).</p>
-
-    <h3>Sources</h3>
-    <p>All cell names, verses, summaries and roll tables are transcribed from the G30 History <i>Sugoroku Game Packet</i>
-    (Spring 2026). The board and every cell illustration are details from the original print by
-    Utagawa Kuniteru <span class="jp">（國輝画）</span>, published by Eikyūdō <span class="jp">（榮久堂版）</span>.
-    Three obvious typographic slips in the packet were corrected: “Cel 26” → Cell 26, “Cel l6” → Cell 6,
-    “Co to Cell 18” → Go to Cell 18.</p>
-
-    <h3>Notes for the classroom</h3>
-    <p>The probabilities shown throughout are exact, not simulated: since an unlisted roll is simply re-rolled, each
-    arrow out of a cell is equally likely, and the board becomes an absorbing Markov chain that can be solved directly.
-    Cell 45 has no verse in the packet; the description here is editorial and marked as such.</p>
-    ${unreachable.length ? `<p>One question worth raising with students: no sequence of legal moves from any of the
-      six starting squares can reach ${unreachable.map(k => `${numOf(k)} <span class="jp">${CELLS[k].kanji}</span>`).join(', ')}.
-      In the packet's roll tables those cells form a small island of their own. That may be a feature of the print —
-      stations reachable only from lives the six characters do not lead — or a gap in the transcription.</p>` : ''}
-
-    <h3>Credits</h3>
-    <p>Concept &amp; idea by <b style="color:var(--ink)">Tristan Grunow</b>. Implementation by
-    <b style="color:var(--ink)">Henrik Bachmann</b>. G30 History, Nagoya University.</p>`);
+    return `<h2>${t('about.h')}</h2>
+    <p>${t('about.p1', { title })}</p>
+    <h3>${t('about.play.h')}</h3><p>${t('about.play.p')}</p>
+    <h3>${t('about.wheel.h')}</h3><p>${t('about.wheel.p')}</p>
+    <h3>${t('about.lang.h')}</h3><p>${t('about.lang.p')}</p>
+    <h3>${t('about.sources.h')}</h3><p>${t('about.sources.p', { kuniteru, eikyudo })}</p>
+    <h3>${t('about.class.h')}</h3><p>${t('about.class.p')}</p>
+    ${unreachable.length ? `<p>${t('about.unreachable', {
+      list: unreachable.map(k => `${numOf(k)} ${jp(CELLS[k])}`).join('、') })}</p>` : ''}
+    <h3>${t('about.credits.h')}</h3><p>${t('about.credits.p')}</p>`;
+  });
 }
 
 /* ---------------------------------------------------------------
-   10.  Screens & wiring
+   11.  Screens & wiring
 --------------------------------------------------------------- */
 function show(name) {
   $$('.screen').forEach(s => s.classList.remove('active'));
@@ -549,25 +663,66 @@ function show(name) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+function setMode(mode) {
+  if (mode === G.mode) return;
+  G.mode = mode;
+  $$('#mode-row button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+  $('#turn-card').classList.toggle('die-mode', mode === 'die');
+  $('#mode-hint').textContent = t('mode.hint.' + mode);
+  $('#btn-roll').textContent = t(mode === 'wheel' ? 'btn.spin' : 'btn.roll');
+  if (G.players.length) { renderWheel(); if (G.selected) renderCellCard(G.selected, G.cardOpts); }
+}
+
 function startGame() {
   G.players = setupChars.map((c, i) => ({
-    name: (setupNames[i] || '').trim() || 'Player ' + (i + 1),
+    name: (setupNames[i] || '').trim() || t('setup.playerName', { n: i + 1 }),
     ch: c, at: String(c.start), path: [], done: null
   }));
-  G.turn = 0; G.round = 1; G.busy = false;
-  $('#logbox').innerHTML = '';
+  G.turn = 0; G.round = 1; G.busy = false; G.log = [];
   show('game');
   buildBoard();
-  G.players.forEach((p, i) => log(
-    `<b>${esc(p.name)}</b> begins as <span class="jp">${p.ch.kanji}</span> ${p.ch.en} in ${numOf(p.at)}
-     <span class="jp">${CELLS[p.at].kanji}</span>`, i));
+  G.players.forEach((p, i) => {
+    const rec = { name: p.name, ch: p.ch, at: p.at };
+    pushLog(() => t('log.begins', {
+      name: esc(rec.name),
+      ch: `${charLabel(rec.ch)}`,
+      cell: `${numOf(rec.at)} ${jp(CELLS[rec.at])}`
+    }), i);
+  });
   drawDie($('#die'), 6, false);
   selectCell(G.players[0].at);
-  renderTurn('Roll to begin.');
+  renderTurn(() => t('turn.begin.' + G.mode));
+}
+
+/* Everything that has to be redrawn when the language or furigana
+   setting changes.  A game in progress is untouched. */
+function relocalize() {
+  applyStatic();
+  renderSetupPlayers();
+  if (G.players.length) {
+    labelBoard();
+    renderTurn(G.msgFn === null ? undefined : G.msgFn);
+    renderLog();
+    if (G.selected) renderCellCard(G.selected, G.cardOpts);
+  }
+  if ($('#screen-results').classList.contains('active')) showResults();
+  if (modalRender) { $('#modal-body').innerHTML = modalRender(); if (modalWire) modalWire(); }
 }
 
 function init() {
+  wheel = SUGOROKU.wheel.create($('#wheel'));
+
+  I.apply();
+  applyStatic();
   buildCountRow(); rollCharacters();
+  I.onChange(relocalize);
+
+  $('#lang-btn').onclick   = () => { I.toggleLang(); };
+  $('#tgl-furi').checked   = I.furigana;
+  $('#tgl-furi').onchange  = e => I.setFurigana(e.target.checked);
+
+  $$('#mode-row button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+  $('#mode-row button[data-mode="wheel"]').classList.add('on');
 
   $('#btn-reroll').onclick = rollCharacters;
   $('#btn-start').onclick  = startGame;
